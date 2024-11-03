@@ -338,7 +338,7 @@ while running:
         enemies.update()
         Mette.update()
         screen.fill((0,0,0))
-        #screen.blit(bg_image, (0, 0))
+        screen.blit(bg_image, (0, 0))
 
         # Moving the background
         x -= 1

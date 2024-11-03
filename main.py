@@ -2,10 +2,10 @@
 import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, ENEMY_INTERVAL, Mett_Interval, PHOTON_COOLDOWN
 from player import Player
-from enemy import Enemy, Mett, Boss
+from enemy import Enemy, Mett, Boss, FireTail
 from photon import Photon
 from pickable import Pickable
-from game_states import draw_start_menu, draw_game_over_screen, game_over
+from game_states import draw_start_menu, draw_game_over_screen, draw_congrats_screen
 from pygame.locals import RLEACCEL, K_ESCAPE, K_SPACE, KEYDOWN, QUIT, RLEACCEL
 
 pygame.init()
@@ -27,12 +27,25 @@ CollectCount = 0
 game_state = "start_menu"
 running = True
 boss_spawned = False
+congrats_delay = 3000  # 2 seconds delay
+boss_defeated_time = None  # To store the time when the boss is defeated
+boss_fire_pos = 500  # Change this to the y-position you want
+fire_delay = 2000  # 2-second delay in milliseconds
+fire_pause = 5000
+boss_fire_time = None
+boss_fire_pause = None
+boss_music_played = False
+music_transition_start = None
+transitioning_music = False
+fade_duration = 2500  # Duration of fade in milliseconds
 
 # Initiate.player
 
 player = Player()
 enemies = pygame.sprite.Group()
 Mette = pygame.sprite.Group()
+boss = pygame.sprite.Group()
+Fire = pygame.sprite.Group()
 photon_group = pygame.sprite.Group()
 pickable_group = pygame.sprite.Group()
 all_sprites = pygame.sprite.Group()
@@ -49,13 +62,21 @@ while running:
                 running = False
             elif event.key == pygame.K_SPACE and game_state == "start_menu":
                 game_state = "game"
-            elif event.key == pygame.K_r and game_state == "Game_over":
+            elif event.key == pygame.K_r and (game_state == "Game_over" or game_state == "congrats"):
                 game_state = "game" 
                 player = Player()
-                # Reset  
-                enemies.empty()  
+                enemies.empty()
+                boss.empty()
+                Mette.empty()
+                photon_group.empty()    
+                pickable_group.empty()
                 all_sprites.empty()
                 CollectCount = 0
+                boss_fire_time = None
+                boss_fire_pause = None
+                boss_spawned = False
+                boss_music_played = False
+                transitioning_music = False
                 all_sprites.add(player)
                 pygame.mixer.music.load("sounds/370801__romariogrande__space-chase.wav")
                 pygame.mixer.music.play(loops=-1)
@@ -77,28 +98,61 @@ while running:
                 photon_group.add(new_photon)
                 last_photon_time = current_time     
         current_time = pygame.time.get_ticks()
-        # New photon
-        if current_time - last_enemy_time > ENEMY_INTERVAL and CollectCount != 1:
+        # New Enemy
+        if current_time - last_enemy_time > ENEMY_INTERVAL and CollectCount != 3:
             new_enemy = Enemy()
             enemies.add(new_enemy)
             all_sprites.add(new_enemy)
             last_enemy_time = current_time
+        
+        if boss_spawned:
+            for boss_sprite in boss:
+                if boss_sprite.rect.x <= boss_fire_pos:
+                    if boss_fire_time is None:
+                        boss_fire_time = pygame.time.get_ticks() 
+                    if pygame.time.get_ticks() - boss_fire_time >= fire_delay:     
+                        new_enemy = Enemy(boss_sprite.rect.midleft)
+                        all_sprites.add(new_enemy)
+                        enemies.add(new_enemy)
+                        if boss_fire_pause == None:
+                            boss_fire_pause = pygame.time.get_ticks() 
+                        if pygame.time.get_ticks() - boss_fire_pause >= fire_pause:
+                            boss_fire_pause = None
+                            boss_fire_time = None
+                    
         # New Meteorite
-        if current_time - last_mett_time > Mett_Interval and CollectCount != 1:
+        if current_time - last_mett_time > Mett_Interval and CollectCount != 3:
             new_Met = Mett()
             Mette.add(new_Met)
             all_sprites.add(new_Met)
             last_mett_time = current_time
         # New Boss
-        if CollectCount >0 and not boss_spawned:
+        if CollectCount >2 and not boss_spawned:
             new_Boss = Boss()
-            enemies.add(new_Boss)
+            boss.add(new_Boss)
+            Fire.add(new_Boss.fire_trail)
             all_sprites.add(new_Boss)
             boss_spawned = True
+        
+        if boss_spawned and not boss_music_played and not transitioning_music:
+            # Start fading out the music, set transition start time
+            pygame.mixer.music.fadeout(fade_duration)
+            music_transition_start = pygame.time.get_ticks()
+            transitioning_music = True  # Begin transition process
+        if transitioning_music:
+            if pygame.time.get_ticks() - music_transition_start >= fade_duration:
+                pygame.mixer.music.load("sounds/683457__seth_makes_sounds__dope-video-game-boss-music.wav")
+                pygame.mixer.music.play(loops=-1, fade_ms=fade_duration, start=4)  # Start with a fade-in
+                boss_music_played = True
+                transitioning_music = False  # Transition complete
+
         # Update sprites
         photon_group.update()
         enemies.update()
+        boss.update(player.rect.centery)
+        pickable_group.update()
         Mette.update()
+        Fire.update()
         # Background
         x -= 1  # Move the background leftward
         if x <= -bg_image.get_width():
@@ -112,10 +166,11 @@ while running:
 
         # Collisoin Detection
         # Player
-        if pygame.sprite.spritecollideany(player, enemies) or pygame.sprite.spritecollideany(player, Mette):
+        if pygame.sprite.spritecollideany(player, enemies) or pygame.sprite.spritecollideany(player, Mette) or pygame.sprite.spritecollideany(player, boss):
             game_state = "Game_over"
-            game_over()
+            pygame.mixer.music.stop()
             player.kill()
+
                
        # Collectable
         if pygame.sprite.spritecollideany(player, pickable_group):
@@ -131,17 +186,38 @@ while running:
                     if met.transformed:
                         pickable_object = Pickable(met.rect.center)
                         pickable_group.add(pickable_object)
-                        all_sprites.add(pickable_object)
+                        #all_sprites.add(pickable_object)
                         met.kill()
                     else:
                         met.transform()
+        # Boss
+        collide = pygame.sprite.groupcollide(photon_group, boss, True, False)
+        if collide:
+            for photon, bosses in collide.items():
+                for collided_boss in bosses:
+                    collided_boss.take_damage()
+                    if collided_boss.health <= 0 and boss_defeated_time is None:
+                        boss_defeated_time = pygame.time.get_ticks()  # Record the current time
+        
+        current_time = pygame.time.get_ticks()
+        if boss_defeated_time is not None and current_time - boss_defeated_time >= congrats_delay:
+            game_state = "congrats"
+            boss_defeated_time = None  # Reset after switching game state
+                        
         # Draw updated Sprites
         for entity in all_sprites:
             screen.blit(entity.surf, entity.rect)
+        for drawn in pickable_group:   
+            screen.blit(drawn.image, drawn.rect)
+        for Flame in Fire:   
+            screen.blit(Flame.image, Flame.rect)
     
     # Game over
     elif game_state == "Game_over":
         draw_game_over_screen(screen) 
+
+    elif game_state == "congrats":
+        draw_congrats_screen(screen)
 
     pygame.display.flip()
     clock.tick(30)
