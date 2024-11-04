@@ -70,6 +70,7 @@ while running:
                 Mette.empty()
                 photon_group.empty()    
                 pickable_group.empty()
+                Fire.empty()
                 all_sprites.empty()
                 CollectCount = 0
                 boss_fire_time = None
