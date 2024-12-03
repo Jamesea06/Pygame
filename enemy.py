@@ -39,9 +39,6 @@ class Mett(Enemy):
         self.health = 5
         self.transformed = False  # Flag to check if the met has been transformed
 
-
-    # Move the Met based on a constant speed
-    # Remove the Met when it passes the left edge of the screen
     def update(self):
         self.rect.move_ip(-self.speed, 0)
         if self.rect.right < 0:
@@ -79,6 +76,7 @@ class Boss(Enemy):
         self.health -= 1
         if self.health <= 0:
             self.kill()  # Remove boss from the game when health reaches 0
+            self.explosion = Explosion(self.rect.center)  # Create explosion at boss's position
             if hasattr(self, 'fire_trail'):
                 self.fire_trail.kill()  # Remove fire trail
 
@@ -88,7 +86,7 @@ class Boss(Enemy):
             if distance_to_target < 100:
                 self.speed = max(1, distance_to_target / 100)
             self.rect.move_ip(-self.speed, 0)
-            self.health = 56 
+            self.health = 52 
             fire_trail_width = self.fire_trail.rect.width
             self.fire_trail.rect.center = (self.rect.right + fire_trail_width // 2 -4, self.rect.centery -3)
         else:
@@ -127,3 +125,34 @@ class FireTail(pygame.sprite.Sprite):
             # Pick a random image from the list
             self.current_image_index = random.randint(0, len(self.images) - 1)  # Randomly select an index
             self.image = self.images[self.current_image_index]  # Update the sprite's image
+
+
+
+class Explosion(pygame.sprite.Sprite):
+    def __init__(self, center):
+        super().__init__()
+        # Load and scale each frame to be 4 times larger
+        self.frames = [
+            pygame.transform.scale(
+                pygame.image.load(f"assets/Ship_Boss_Ex{i}.png").convert_alpha(),
+                (pygame.image.load(f"assets/Ship_Boss_Ex{i}.png").get_width() * 4,
+                 pygame.image.load(f"assets/Ship_Boss_Ex{i}.png").get_height() * 4)
+            )
+            for i in range(1, 8)  # Assuming you have frames named Ship_Boss_Ex1.png, Ship_Boss_Ex2.png, etc.
+        ]
+        self.current_frame = 0
+        self.image = self.frames[self.current_frame]
+        self.rect = self.image.get_rect(center=center)
+        self.animation_speed = 450  # Milliseconds between frames (adjust as needed)
+        self.last_update = pygame.time.get_ticks()
+
+    def update(self):
+        now = pygame.time.get_ticks()
+        if now - self.last_update > self.animation_speed:  # Check if it's time to switch frames
+            self.last_update = now
+            self.current_frame += 1
+            if self.current_frame < len(self.frames):
+                self.image = self.frames[self.current_frame]
+            else:
+                self.kill()  # Remove the explosion once the animation is done
+

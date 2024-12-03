@@ -2,7 +2,7 @@
 import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, ENEMY_INTERVAL, Mett_Interval, PHOTON_COOLDOWN
 from player import Player
-from enemy import Enemy, Mett, Boss, FireTail
+from enemy import Enemy, Mett, Boss, FireTail, Explosion
 from photon import Photon
 from pickable import Pickable
 from game_states import draw_start_menu, draw_game_over_screen, draw_congrats_screen
@@ -48,6 +48,7 @@ boss = pygame.sprite.Group()
 Fire = pygame.sprite.Group()
 photon_group = pygame.sprite.Group()
 pickable_group = pygame.sprite.Group()
+explosions_group = pygame.sprite.Group()
 all_sprites = pygame.sprite.Group()
 all_sprites.add(player)
 
@@ -91,6 +92,7 @@ while running:
         pressed_keys = pygame.key.get_pressed()
         # Update Player
         player.update(pressed_keys)
+        # New Photon
         if pressed_keys[K_SPACE]:
             current_time = pygame.time.get_ticks()
             if current_time - last_photon_time > PHOTON_COOLDOWN:
@@ -154,6 +156,7 @@ while running:
         pickable_group.update()
         Mette.update()
         Fire.update()
+        explosions_group.update()
         # Background
         x -= 1  # Move the background leftward
         if x <= -bg_image.get_width():
@@ -198,6 +201,7 @@ while running:
                 for collided_boss in bosses:
                     collided_boss.take_damage()
                     if collided_boss.health <= 0 and boss_defeated_time is None:
+                        explosions_group.add(new_Boss.explosion)
                         boss_defeated_time = pygame.time.get_ticks()  # Record the current time
         
         current_time = pygame.time.get_ticks()
@@ -212,6 +216,8 @@ while running:
             screen.blit(drawn.image, drawn.rect)
         for Flame in Fire:   
             screen.blit(Flame.image, Flame.rect)
+        for explosion in explosions_group:
+            screen.blit(explosion.image, explosion.rect)
     
     # Game over
     elif game_state == "Game_over":
